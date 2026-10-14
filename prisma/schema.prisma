@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Group {
+  id           String   @id @default(cuid())
+  code         String   @unique // A, B, C, D
+  name         String
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teams   Team[]
+  matches Match[]
+
+  @@map("groups")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  shortName   String? // for monograms
+  groupId     String
+  status      String   @default("active") // active, inactive
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  group       Group    @relation(fields: [groupId], references: [id])
+  homeMatches Match[]  @relation("HomeTeam")
+  awayMatches Match[]  @relation("AwayTeam")
+  players     Player[]
+
+  @@index([groupId])
+  @@map("teams")
+}
+
+model Player {
+  id             String   @id @default(cuid())
+  teamId         String
+  fullName       String
+  normalizedName String
+  position       String?
+  jerseyNumber   Int?
+  age            Int?
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@unique([teamId, normalizedName])
+  @@index([teamId])
+  @@map("players")
+}
+
+model Match {
+  id                String    @id @default(cuid())
+  stage             String // GROUP, QUARTER_FINAL, SEMI_FINAL, THIRD_PLACE, FINAL
+  groupId           String?
+  homeTeamId        String?
+  awayTeamId        String?
+  homeSlot          String? // e.g. "Winner Group A"
+  awaySlot          String?
+  round             String? // QF1, QF2, SF1, FINAL, etc.
+  kickoffAt         DateTime? // stored in UTC
+  venue             String?
+  status            String    @default("SCHEDULED") // SCHEDULED, LIVE, HALF_TIME, FULL_TIME, POSTPONED, CANCELLED
+  halfTimeHomeScore Int?
+  halfTimeAwayScore Int?
+  fullTimeHomeScore Int?
+  fullTimeAwayScore Int?
+  notes             String?
+  published         Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  group     Group? @relation(fields: [groupId], references: [id])
+  homeTeam  Team?  @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam  Team?  @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  events    MatchEvent[]
+
+  @@index([status])
+  @@index([kickoffAt])
+  @@index([groupId])
+  @@index([stage])
+  @@map("matches")
+}
+
+model MatchEvent {
+  id               String   @id @default(cuid())
+  matchId          String
+  teamId           String?
+  playerId         String?
+  relatedPlayerId  String? // assist
+  eventType        String // GOAL, OWN_GOAL, YELLOW_CARD, RED_CARD, SUBSTITUTION
+  minute           Int
+  addedTime        Int?
+  ownGoal          Boolean  @default(false)
+  notes            String?
+  createdByAdminId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@map("match_events")
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  username           String
+  normalizedUsername String   @unique
+  phone              String
+  normalizedPhone    String   @unique
+  passwordHash       String
+  birthYear          Int
+  role               String   @default("FAN") // FAN, ADMIN, PRIMARY_ADMIN
+  status             String   @default("active") // active, disabled
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  sessions Session[]
+  audits   AdminAuditLog[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+  ip        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("admin_audit_logs")
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
