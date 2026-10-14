@@ -130,6 +130,19 @@ export default async function MatchPage({
           </ul>
         </div>
       )}
+
+      {/* Share score card */}
+      <div className="mt-4 card p-4">
+        <h3 className="mb-2 text-sm font-semibold text-slate-700">Share</h3>
+        <a
+          href={`/api/share/score/${match.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center rounded-lg bg-league-primary px-4 py-2 text-sm font-medium text-white hover:bg-league-secondary"
+        >
+          Download score card
+        </a>
+      </div>
     </div>
   );
 }

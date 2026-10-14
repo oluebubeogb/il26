@@ -1,103 +1,121 @@
-# Ibeku League 2026 — Phase 1
+# Ibeku League 2026 — Phase 2 (Full Product)
 
 Official competition website for **Ibeku League 2026** (11 Oct 2026 – 3 Jan 2027).
 
-**Phase 1** delivers a production-ready core platform:
+Phase 2 includes everything from Phase 1 **plus**:
 
-- Groups, teams, fixtures & knockout slots
-- Automatic group tables + overall ranking
-- Public pages (Home, Fixtures, Results, Groups, Standings, Knockout, Teams, Match centre)
-- Fan signup / login / recovery
-- Admin console for scores, teams, players, users and secondary admins
-- Docker Compose + Coolify-ready deployment
-- PostgreSQL persistence, health checks, audit log
-
-**Out of scope for Phase 1:** AI analysis, fan predictions, shareable score images, CSV roster import.
+- Fan predictions (outcome + correct score) with cutoff and grading
+- CSV player roster import (preview, partial import, error report)
+- Match events model (goals, cards)
+- AI match previews & post-match analysis via RunPod (OpenAI-compatible)
+- Shareable SVG score cards and group table graphics
+- Admin screens for predictions, AI, CSV import
 
 ---
 
 ## Stack
 
-- Next.js 15 (App Router) + TypeScript
-- Tailwind CSS
+- Next.js 15 (App Router) + TypeScript + Tailwind
 - Prisma + PostgreSQL 17
-- Argon2id password hashing
-- Docker multi-stage build
+- Argon2id · Zod · csv-parse
+- Docker Compose (web + db)
 
 ---
 
-## Quick start (local with Docker)
+## Quick start
 
 ```bash
 cp .env.example .env
-# Edit .env — set strong PRIMARY_ADMIN_* and SESSION_SECRET
+# Set PRIMARY_ADMIN_*, SESSION_SECRET, and optionally LLM_* for AI
 
 docker compose up --build
 ```
 
-App: http://localhost:3000  
-Health: http://localhost:3000/api/health
-
-Primary admin is created automatically from the environment variables on first start (never reset on subsequent restarts).
+- App: http://localhost:3000  
+- Health: http://localhost:3000/api/health  
 
 ---
 
 ## Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string (internal hostname `db` in Compose) |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Yes | Used by the db service |
-| `PRIMARY_ADMIN_USERNAME` | First start | Bootstrap primary admin |
-| `PRIMARY_ADMIN_PASSWORD` | First start | Bootstrap primary admin (hashed) |
-| `PRIMARY_ADMIN_PHONE` | First start | Bootstrap primary admin |
-| `SESSION_SECRET` | Yes | Long random string (≥32 chars) |
-| `APP_URL` | Yes | Public base URL |
-| `COOKIE_SECURE` | Prod | `true` behind HTTPS |
-| `PORT` | No | Default 3000 |
+### Required (Phase 1)
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` / `POSTGRES_*` | PostgreSQL |
+| `PRIMARY_ADMIN_USERNAME/PASSWORD/PHONE` | First-start bootstrap only |
+| `SESSION_SECRET` | ≥32 char random string |
+| `APP_URL` | Public base URL |
 
-Never commit real secrets. Keep production values only in Coolify.
+### Optional (Phase 2 — AI)
+| Variable | Description |
+|----------|-------------|
+| `AI_ENABLED` | `true` / `false` (default false) |
+| `LLM_BASE_URL` | RunPod OpenAI-compatible base URL |
+| `LLM_API_KEY` | Server-side only — never `NEXT_PUBLIC_*` |
+| `LLM_MODEL` | Model name on the endpoint |
+| `AI_AUTO_PUBLISH` | `true` to skip draft review (default false) |
 
----
-
-## Coolify deployment
-
-1. Push this repository to GitHub.
-2. Create a new application in Coolify → Docker Compose.
-3. Point to this repo and the `docker-compose.yml` file.
-4. Set all environment variables listed above.
-5. Ensure the web service port is 3000 and the domain has HTTPS.
-6. Deploy. Check logs for migration + seed + admin bootstrap.
-7. Visit `/api/health` and log in as the primary admin.
-
-PostgreSQL data is stored in a named volume and survives restarts.
+Site works fully when AI is disabled or unavailable.
 
 ---
 
-## Main routes
+## New routes (Phase 2)
 
-**Public**
-- `/` — Home
-- `/fixtures` — Fixtures
-- `/results` — Results
-- `/groups` — Group tables
-- `/standings` — Overall ranking (comparison only)
-- `/knockout` — Bracket
-- `/teams` / `/teams/[slug]` — Teams
-- `/matches/[id]` — Match centre
-- `/login` `/signup` `/account` `/forgot-password`
-
-**Admin** (`/admin`)
-- Dashboard, Matches (edit scores), Teams, Players, Users, Admins (primary only)
+| Route | Purpose |
+|-------|---------|
+| `/predictions` | Fan prediction forms + disclaimer |
+| `/api/predictions` | Create / list predictions |
+| `/api/share/score/[matchId]` | SVG score card |
+| `/api/share/table/[group]` | SVG group table |
+| `/admin/import` | CSV player import |
+| `/admin/ai` | Generate / review / publish AI analysis |
 
 ---
 
-## Standings rules
+## Predictions rules
 
-- Points: Win 3, Draw 1, Loss 0
-- Sort: Points → Goal Difference → Goals For
-- Qualification: top 2 per group only
-- Overall ranking is for comparison and does **not** affect qualification
+- Entertainment only — **no money, stakes or prizes**
+- Outcome: Home / Draw / Away
+- Correct score: one active per user per match (editable before cutoff)
+- Cutoff: when match becomes Live (or admin `predictionCutoff`)
+- Graded automatically when admin sets Full-time score
+
+---
+
+## CSV import
+
+Accepted headers: `name`, `player`, `full_name`, `position`, `age`, `phone`, `jersey`, `jersey_number`.  
+Name-only rows are valid. Blank optional fields do not overwrite existing data.  
+Duplicates within a team are merged.
+
+---
+
+## AI
+
+1. Set `LLM_*` and `AI_ENABLED=true` in Coolify.
+2. Admin → AI → Generate Preview or Post-match.
+3. Review draft → Publish.
+4. Published analysis appears on match pages / home when available.
+
+Never sends passwords, phones or private user data to the LLM.
+
+---
+
+## Share graphics
+
+- Score card: `/api/share/score/{matchId}` (SVG 1200×1200)
+- Group table: `/api/share/table/A` (or B/C/D)
+- Includes league name + restrained sponsor line
+- No private data in images
+
+---
+
+## Coolify
+
+1. Push repo to GitHub  
+2. Docker Compose app → this `docker-compose.yml`  
+3. Set all env vars (including optional AI)  
+4. Deploy → check `/api/health` and primary-admin login  
 
 ---
 
@@ -107,12 +125,8 @@ PostgreSQL data is stored in a named volume and survives restarts.
 
 ---
 
-## Phase 2 (future)
+## Known limitations
 
-Predictions, full match events (goals/cards), CSV import, AI analysis (RunPod), shareable graphics.
-
----
-
-## Licence
-
-Private / league use.
+- Fan recovery uses year of birth (no SMS provider configured)
+- Group schedule is as supplied (not full round-robin) — organisers should confirm
+- AI jobs processed inline on generate for simplicity; optional background worker can be added later

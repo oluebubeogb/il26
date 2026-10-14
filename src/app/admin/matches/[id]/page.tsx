@@ -48,6 +48,12 @@ async function updateMatch(formData: FormData) {
 
   await prisma.match.update({ where: { id }, data });
 
+  // Grade predictions when match is full-time
+  if (status === "FULL_TIME") {
+    const { gradeMatchPredictions } = await import("@/lib/predictions");
+    await gradeMatchPredictions(id);
+  }
+
   await audit(user.id, "MATCH_UPDATE", "Match", id, {
     status,
     ftHome,

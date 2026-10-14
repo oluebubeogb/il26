@@ -10,6 +10,7 @@ const items = [
   { href: "/fixtures", label: "Fixtures", icon: Calendar },
   { href: "/groups", label: "Groups", icon: LayoutGrid },
   { href: "/standings", label: "Table", icon: Trophy },
+  { href: "/predictions", label: "Predict", icon: Trophy },
   { href: "/teams", label: "Teams", icon: Users },
 ];
 

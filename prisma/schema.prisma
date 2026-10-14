@@ -9,7 +9,7 @@ datasource db {
 
 model Group {
   id           String   @id @default(cuid())
-  code         String   @unique // A, B, C, D
+  code         String   @unique
   name         String
   displayOrder Int      @default(0)
   createdAt    DateTime @default(now())
@@ -25,9 +25,9 @@ model Team {
   id          String   @id @default(cuid())
   name        String
   slug        String   @unique
-  shortName   String? // for monograms
+  shortName   String?
   groupId     String
-  status      String   @default("active") // active, inactive
+  status      String   @default("active")
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -49,6 +49,7 @@ model Player {
   position       String?
   jerseyNumber   Int?
   age            Int?
+  phone          String? // private — never public
   status         String   @default("active")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -62,29 +63,32 @@ model Player {
 
 model Match {
   id                String    @id @default(cuid())
-  stage             String // GROUP, QUARTER_FINAL, SEMI_FINAL, THIRD_PLACE, FINAL
+  stage             String
   groupId           String?
   homeTeamId        String?
   awayTeamId        String?
-  homeSlot          String? // e.g. "Winner Group A"
+  homeSlot          String?
   awaySlot          String?
-  round             String? // QF1, QF2, SF1, FINAL, etc.
-  kickoffAt         DateTime? // stored in UTC
+  round             String?
+  kickoffAt         DateTime?
   venue             String?
-  status            String    @default("SCHEDULED") // SCHEDULED, LIVE, HALF_TIME, FULL_TIME, POSTPONED, CANCELLED
+  status            String    @default("SCHEDULED")
   halfTimeHomeScore Int?
   halfTimeAwayScore Int?
   fullTimeHomeScore Int?
   fullTimeAwayScore Int?
   notes             String?
   published         Boolean   @default(true)
+  predictionCutoff  DateTime? // optional admin override
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  group     Group? @relation(fields: [groupId], references: [id])
-  homeTeam  Team?  @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam  Team?  @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  events    MatchEvent[]
+  group       Group?         @relation(fields: [groupId], references: [id])
+  homeTeam    Team?          @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam    Team?          @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  events      MatchEvent[]
+  predictions Prediction[]
+  analyses    AIAnalysis[]
 
   @@index([status])
   @@index([kickoffAt])
@@ -98,7 +102,7 @@ model MatchEvent {
   matchId          String
   teamId           String?
   playerId         String?
-  relatedPlayerId  String? // assist
+  relatedPlayerId  String?
   eventType        String // GOAL, OWN_GOAL, YELLOW_CARD, RED_CARD, SUBSTITUTION
   minute           Int
   addedTime        Int?
@@ -122,13 +126,15 @@ model User {
   normalizedPhone    String   @unique
   passwordHash       String
   birthYear          Int
-  role               String   @default("FAN") // FAN, ADMIN, PRIMARY_ADMIN
-  status             String   @default("active") // active, disabled
+  role               String   @default("FAN")
+  status             String   @default("active")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  sessions Session[]
-  audits   AdminAuditLog[]
+  sessions    Session[]
+  audits      AdminAuditLog[]
+  predictions Prediction[]
+  reports     PredictionReport[]
 
   @@index([role])
   @@map("users")
@@ -173,4 +179,105 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("app_settings")
+}
+
+// ─── Phase 2 models ───────────────────────────────────────────
+
+model Prediction {
+  id              String   @id @default(cuid())
+  userId          String
+  matchId         String
+  type            String // OUTCOME, CORRECT_SCORE, DOUBLE_CHANCE
+  selectedOutcome String? // HOME, DRAW, AWAY, HOME_DRAW, DRAW_AWAY, HOME_AWAY
+  homeScore       Int?
+  awayScore       Int?
+  comment         String?
+  isCorrect       Boolean? // graded after full-time
+  status          String   @default("active") // active, hidden
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match   Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reports PredictionReport[]
+
+  // At most one active correct-score per user per match
+  @@unique([userId, matchId, type])
+  @@index([matchId])
+  @@index([userId])
+  @@map("predictions")
+}
+
+model PredictionReport {
+  id           String   @id @default(cuid())
+  predictionId String
+  reporterId   String
+  reason       String?
+  status       String   @default("pending") // pending, reviewed, dismissed
+  createdAt    DateTime @default(now())
+
+  prediction Prediction @relation(fields: [predictionId], references: [id], onDelete: Cascade)
+  reporter   User       @relation(fields: [reporterId], references: [id])
+
+  @@index([status])
+  @@map("prediction_reports")
+}
+
+model AIAnalysis {
+  id            String    @id @default(cuid())
+  matchId       String?
+  scope         String    @default("match") // match, tournament
+  analysisType  String // PREVIEW, POST_MATCH, GROUP_OUTLOOK
+  model         String?
+  promptVersion String?
+  sourceRef     String? // snapshot reference
+  content       String
+  structured    Json?
+  status        String    @default("draft") // draft, published, stale, failed
+  generatedAt   DateTime  @default(now())
+  reviewedBy    String?
+  publishedAt   DateTime?
+  stale         Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  match Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([matchId])
+  @@index([status])
+  @@map("ai_analyses")
+}
+
+model AIJob {
+  id          String    @id @default(cuid())
+  type        String // GENERATE_PREVIEW, GENERATE_POST_MATCH
+  payload     Json
+  status      String    @default("queued") // queued, running, ready, failed
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  lastError   String?
+  resultId    String? // AIAnalysis id when ready
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, availableAt])
+  @@map("ai_jobs")
+}
+
+model PlayerImport {
+  id               String   @id @default(cuid())
+  teamId           String
+  uploadedByAdminId String
+  filename         String
+  totalRows        Int      @default(0)
+  successCount     Int      @default(0)
+  errorCount       Int      @default(0)
+  status           String   @default("pending") // pending, committed, partial
+  reportJson       Json?
+  createdAt        DateTime @default(now())
+
+  @@index([teamId])
+  @@map("player_imports")
 }

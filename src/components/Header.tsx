@@ -8,6 +8,7 @@ const nav = [
   { href: "/groups", label: "Groups" },
   { href: "/standings", label: "Standings" },
   { href: "/knockout", label: "Knockout" },
+  { href: "/predictions", label: "Predictions" },
   { href: "/teams", label: "Teams" },
 ];
 

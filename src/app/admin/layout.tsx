@@ -18,6 +18,8 @@ export default async function AdminLayout({
     { href: "/admin/teams", label: "Teams" },
     { href: "/admin/players", label: "Players" },
     { href: "/admin/users", label: "Users" },
+    { href: "/admin/import", label: "CSV Import" },
+    { href: "/admin/ai", label: "AI" },
   ];
 
   if (user.role === "PRIMARY_ADMIN") {
