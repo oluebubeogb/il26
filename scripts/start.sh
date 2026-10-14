@@ -5,10 +5,12 @@ echo "=== Ibeku League 2026 — Starting ==="
 
 echo "Waiting for database..."
 i=0
-until npx prisma db execute --stdin <<SQL
-SELECT 1
-SQL
-do
+# Use node + prisma to check connectivity without needing full execute stdin quirks
+until node -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+p.\$queryRaw\`SELECT 1\`.then(() => p.\$disconnect()).then(() => process.exit(0)).catch(() => process.exit(1));
+" 2>/dev/null; do
   i=$((i+1))
   if [ "$i" -gt 30 ]; then
     echo "Database not ready after 60s — exiting"
@@ -19,7 +21,7 @@ do
 done
 
 echo "Running migrations..."
-npx prisma migrate deploy
+npx prisma migrate deploy --schema=prisma/schema.prisma
 
 echo "Running seed (idempotent)..."
 npx tsx prisma/seed.ts || echo "Seed finished (or already applied)"

@@ -4,13 +4,17 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
 
 # ---- Dependencies ----
+# Install WITHOUT postinstall — schema is not present in this stage
 FROM base AS deps
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 # ---- Builder ----
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json* ./
+# Schema must exist before prisma generate
+COPY prisma ./prisma
 COPY . .
 RUN npx prisma generate
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -31,15 +35,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/scripts ./scripts
 
-# Install only production tools needed at runtime for migrations
-RUN npm install --omit=dev prisma tsx --legacy-peer-deps 2>/dev/null || true
-
+# Runtime tools for migrate + seed
+USER root
+RUN npm install --omit=dev prisma tsx --legacy-peer-deps
 USER nextjs
-EXPOSE 3000
 
-# Startup script handles migrate + seed + start
+EXPOSE 3000
 CMD ["sh", "scripts/start.sh"]
